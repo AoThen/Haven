@@ -28,13 +28,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
+      - name: Init submodules (with retry)
+        uses: ./.github/actions/init-submodules-with-retry
+
+      - name: Set up toolchain (JDK/SDK/NDK/Go/Rust)
+        uses: ./.github/actions/setup-toolchain
 
       - name: Decode or generate release keystore
         id: keystore
@@ -76,7 +76,7 @@ jobs:
             -PskipWaylandNatives=true \
             -PskipFfmpegNatives=true \
             -Pkotlin.compiler.execution.strategy=in-process \
-            -Dorg.gradle.jvmargs=-Xmx3g 2>&1 | tee build-log.txt
+            -Dorg.gradle.jvmargs=-Xmx4g 2>&1 | tee build-log.txt
 
       - name: Upload build log (debug)
         if: failure()
