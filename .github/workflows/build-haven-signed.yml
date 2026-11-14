@@ -85,27 +85,15 @@ jobs:
           path: build-log.txt
           retention-days: 1
 
-      - name: Upload build log to ci-debug release (debug)
+      - name: Open debug issue with log tail (debug)
         if: failure()
         run: |
           API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
           AUTH="Authorization: Bearer ${GITHUB_TOKEN}"
-          TAG=ci-debug
-          REL_ID=$(curl -s -H "$AUTH" "$API/releases/tags/$TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
-          if [ -z "$REL_ID" ]; then
-            REL_ID=$(curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
-              -d "{\"tag_name\":\"$TAG\",\"name\":\"CI debug logs\",\"prerelease\":true}" \
-              "$API/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
-          fi
-          echo "release id: $REL_ID"
-          for AID in $(curl -s -H "$AUTH" "$API/releases/$REL_ID/assets" | python3 -c 'import json,sys; [print(a["id"]) for a in json.load(sys.stdin) if a["name"]=="build-log-tail.txt"]'); do
-            curl -s -X DELETE -H "$AUTH" "$API/releases/assets/$AID"
-          done
-          tail -n 500 "${GITHUB_WORKSPACE}/build-log.txt" > /tmp/build-log-tail.txt
-          curl -s -X POST -H "$AUTH" -H "Content-Type: application/octet-stream" \
-            --data-binary @/tmp/build-log-tail.txt \
-            "$API/releases/$REL_ID/assets?name=build-log-tail.txt"
-          echo "done"
+          BODY=$(tail -n 300 "${GITHUB_WORKSPACE}/build-log.txt" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()[-60000:]))')
+          curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            -d "{\"title\":\"ci-debug: build failure run=${GITHUB_RUN_ID}\",\"body\":$BODY}" \
+            "$API/issues" | head -c 200
 
       - name: Upload generated keystore (first run only)
         if: steps.keystore.outputs.generated == 'true'
