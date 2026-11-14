@@ -34,10 +34,12 @@ jobs:
           java-version: 17
 
       - name: Decode or generate release keystore
+        id: keystore
         run: |
           if [ -n "${{ secrets.SIGNING_KEY_BASE64 }}" ]; then
             echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > haven-release.jks
             echo "Keystore decoded from secrets (stable signature)"
+            echo "generated=false" >> "$GITHUB_OUTPUT"
           else
             echo "SIGNING_KEY_BASE64 not set - generating a fresh keystore"
             echo "Download the generated-keystore artifact, base64 it into secrets to keep a stable signature"
@@ -45,6 +47,7 @@ jobs:
               -alias haven -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass havenSelfSign -keypass havenSelfSign \
               -dname "CN=Haven Self-Build, OU=Self, O=AoThen, C=CN"
+            echo "generated=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Gradle
@@ -75,7 +78,7 @@ jobs:
             -Dorg.gradle.jvmargs=-Xmx3g
 
       - name: Upload generated keystore (first run only)
-        if: ${{ secrets.SIGNING_KEY_BASE64 == '' }}
+        if: steps.keystore.outputs.generated == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: generated-keystore
