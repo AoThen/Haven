@@ -1,0 +1,90 @@
+name: Build Haven (signed)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/build-haven-signed.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 7
+          keep_minimum_runs: 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Decode or generate release keystore
+        run: |
+          if [ -n "${{ secrets.SIGNING_KEY_BASE64 }}" ]; then
+            echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > haven-release.jks
+            echo "Keystore decoded from secrets (stable signature)"
+          else
+            echo "SIGNING_KEY_BASE64 not set - generating a fresh keystore"
+            echo "Download the generated-keystore artifact, base64 it into secrets to keep a stable signature"
+            keytool -genkeypair -v -keystore haven-release.jks \
+              -alias haven -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass havenSelfSign -keypass havenSelfSign \
+              -dname "CN=Haven Self-Build, OU=Self, O=AoThen, C=CN"
+          fi
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed APK (arm64 full release)
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            export KEYSTORE_PASSWORD=havenSelfSign
+            export KEY_ALIAS=haven
+            export KEY_PASSWORD=havenSelfSign
+          fi
+          export KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD
+          # 免费 runner 7G 内存：覆盖 gradle.properties 的 8G 堆，并用
+          # in-process Kotlin 省掉独立的 3G Kotlin daemon；wayland/ffmpeg
+          # natives 跳过编译（SSH/RDP/VNC/SFTP 不受影响）
+          ./gradlew :app:assembleArm64FullRelease \
+            -PtargetAbi=arm64 \
+            -PnoLintVital \
+            -PskipWaylandNatives=true \
+            -PskipFfmpegNatives=true \
+            -Pkotlin.compiler.execution.strategy=in-process \
+            -Dorg.gradle.jvmargs=-Xmx3g
+
+      - name: Upload generated keystore (first run only)
+        if: ${{ secrets.SIGNING_KEY_BASE64 == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-keystore
+          path: haven-release.jks
+          retention-days: 1
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Haven-arm64-full-release
+          path: app/build/outputs/apk/**/release/*.apk
+          retention-days: 7
