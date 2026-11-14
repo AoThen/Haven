@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
-      contents: read
+      contents: write
       actions: write
 
     steps:
@@ -84,6 +84,19 @@ jobs:
           name: build-log
           path: build-log.txt
           retention-days: 1
+
+      - name: Push build log tail to ci-debug branch (debug)
+        if: failure()
+        run: |
+          mkdir -p /tmp/dbg && cd /tmp/dbg
+          git init -q
+          git config user.name ci-debug
+          git config user.email ci-debug@users.noreply.github.com
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          tail -n 500 "${GITHUB_WORKSPACE}/build-log.txt" > build-log-tail.txt || true
+          git add build-log-tail.txt
+          git commit -q -m "ci debug log $(date -u +%FT%TZ) run=${GITHUB_RUN_ID}"
+          git push -q origin HEAD:refs/heads/ci-debug --force
 
       - name: Upload generated keystore (first run only)
         if: steps.keystore.outputs.generated == 'true'
