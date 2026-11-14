@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: write
       actions: write
+      issues: write
 
     steps:
       - name: Delete workflow runs
@@ -93,7 +94,8 @@ jobs:
           BODY=$(tail -n 300 "${GITHUB_WORKSPACE}/build-log.txt" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()[-60000:]))')
           curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
             -d "{\"title\":\"ci-debug: build failure run=${GITHUB_RUN_ID}\",\"body\":$BODY}" \
-            "$API/issues" | head -c 200
+            -w "\nissue_create_http=%{http_code}\n" \
+            "$API/issues" | tail -c 300
 
       - name: Upload generated keystore (first run only)
         if: steps.keystore.outputs.generated == 'true'
