@@ -68,16 +68,22 @@ jobs:
             export KEY_PASSWORD=havenSelfSign
           fi
           export KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD
-          # 免费 runner 7G 内存：覆盖 gradle.properties 的 8G 堆，并用
-          # in-process Kotlin 省掉独立的 3G Kotlin daemon；wayland/ffmpeg
-          # natives 跳过编译（SSH/RDP/VNC/SFTP 不受影响）
+          set -o pipefail
           ./gradlew :app:assembleArm64FullRelease \
             -PtargetAbi=arm64 \
             -PnoLintVital \
             -PskipWaylandNatives=true \
             -PskipFfmpegNatives=true \
             -Pkotlin.compiler.execution.strategy=in-process \
-            -Dorg.gradle.jvmargs=-Xmx3g
+            -Dorg.gradle.jvmargs=-Xmx3g 2>&1 | tee build-log.txt
+
+      - name: Upload build log (debug)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build-log.txt
+          retention-days: 1
 
       - name: Upload generated keystore (first run only)
         if: steps.keystore.outputs.generated == 'true'
