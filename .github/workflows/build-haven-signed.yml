@@ -75,6 +75,7 @@ jobs:
             -PnoLintVital \
             -PskipWaylandNatives=true \
             -PskipFfmpegNatives=true \
+            -PskipUml=true \
             -Pkotlin.compiler.execution.strategy=in-process \
             -Dorg.gradle.jvmargs=-Xmx4g 2>&1 | tee build-log.txt
 
